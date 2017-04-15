@@ -16,7 +16,7 @@ script:
   - make -j4
   - make INSTALL_ROOT=appdir install ; find appdir/
   - mkdir -p appdir/usr/share/applications/
-  - cp Deploy/AppImage/default.desktop appdir/usr/share/applications/animationmaker.desktop
+  - cp Deploy/AppImage/animationmaker.desktop appdir/usr/share/applications/
 
 after_success:
   - wget -c "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage" 
