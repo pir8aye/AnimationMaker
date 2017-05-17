@@ -64,14 +64,19 @@ public slots:
     void deleteKeyFrameSlot(ResizeableItem *item, QString propertyName, KeyFrame *frame);
     void deleteTransitionSlot(ResizeableItem *item, QString propertyName, KeyFrame *frame);
     void addTransitionSlot(ResizeableItem *item, QString propertyName, KeyFrame *frame);
+    void transitionSelected(KeyFrame *frame);
+    void transitionDeselected();
+    void scrollValueChanged(int value);
 
 signals:
     void itemSelectionChanged(ResizeableItem *item);
     void keyframeAdded(ResizeableItem *item, QString propertyName);
     void keyframeDeleted(ResizeableItem *item, QString propertyName);
     void transitionDeleted(ResizeableItem *item, QString propertyName);
+    void transitionSelectionChanged(KeyFrame *frame);
 
 private:
+    QScrollBar *m_sb;
     QTreeWidget *m_tree;
     QMenu *m_contextMenu;
     QAction *m_delAct;
@@ -88,5 +93,5 @@ private:
     QTreeWidgetItem *search(ResizeableItem *item);
     QTreeWidgetItem *search(QTreeWidgetItem *treeItem, QString propertyName);
 };
-
+QString timeString(int milliseconds, bool showMinutes = true);
 #endif // TIMELINE_H

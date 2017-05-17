@@ -1,34 +1,12 @@
-
-Icon integrate for each platform
-
-ColorAnimation ?
-
-additional properties?
-
-Install package
-
-
-
-Next release
-------------
 Treeview
     - Object make invisible
     - Object lock
 
-Export as plugin?
-
-Export HTML ?
-
 Rectangle new
     - create via mouse drag
-    - pressing ALT-key mouse position will be used as center
 
 Toolbar for files (Save, Open)
 
 Items Translation like Rotate
 
-ScrollArea for PropertyPanel
-
 Scene Zoom, Minimum size of 20x20 not needed anymore if zoom is implemented
-
-Change Transition Easing

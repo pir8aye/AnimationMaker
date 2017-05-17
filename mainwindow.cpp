@@ -20,21 +20,25 @@
 
 #include "mainwindow.h"
 #include "animationscene.h"
-#include "rectangle.h"
-#include "ellipse.h"
 #include "vectorgraphic.h"
-#include "text.h"
 #include "bitmap.h"
 #include "exception.h"
+#include "news.h"
+#include "itempropertyeditor.h"
+#include "timeline.h"
+#include "scenepropertyeditor.h"
+#include "transitioneditor.h"
+#include "expander.h"
+#include "encode.h"
 #include <QtTest/QTest>
 #include <QMessageBox>
 #include <QGraphicsSvgItem>
 #include <QTreeWidget>
+#include <QMainWindow>
+#include <QtWidgets>
 
 #define MAGIC 0x414D4200
 #define FILE_VERSION 100
-
-void video_encode(const char *filename, QGraphicsView *view, int length, MainWindow *win, AnimationScene *scene);
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent)
@@ -118,7 +122,6 @@ void MainWindow::setTitle()
 void MainWindow::reset()
 {
     scene->reset();
-    //model->reset();
     timeline->reset();
 }
 
@@ -129,6 +132,7 @@ void MainWindow::newfile()
     loadedFile.setFile("");
     setTitle();
     m_scenePropertyEditor->setScene(scene);
+    propertiesdock->setWidget(m_scenePropertyEditor);
 }
 
 void MainWindow::open()
@@ -147,7 +151,11 @@ void MainWindow::open()
         return;
     reset();
     QFile file(fileName);
-    file.open(QIODevice::ReadOnly);
+    if(!file.open(QIODevice::ReadOnly))
+    {
+        QMessageBox::warning(this, "Error", "Unable to open file " + fileName);
+        return;
+    }
     QDataStream in(&file);
 
     // Read and check the header
@@ -276,6 +284,13 @@ void MainWindow::createGui()
 
     selectAct->toggle();
 
+    News *news = new News("http://wp12518071.server-he.de/wp-content/uploads/animationmaker.txt");
+    newsdock = new QDockWidget(tr("News"), this);
+    newsdock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    newsdock->setWidget(news);
+    newsdock->setObjectName("News");
+    addDockWidget(Qt::RightDockWidgetArea, newsdock);
+
     tooldock = new QDockWidget(tr("Tools"), this);
     tooldock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     tooldock->setWidget(toolpanel);
@@ -287,6 +302,8 @@ void MainWindow::createGui()
 
     m_itemPropertyEditor = new ItemPropertyEditor();
     m_scenePropertyEditor = new ScenePropertyEditor();
+    m_transitionEditor = new TransitionEditor();
+    m_transitionEditor->setUndoStack(undoStack);
 
     m_scenePropertyEditor->setScene(scene);
 
@@ -313,7 +330,7 @@ void MainWindow::createGui()
     elementTree->addTopLevelItem(root);
     connect(elementTree, SIGNAL(currentItemChanged(QTreeWidgetItem*,QTreeWidgetItem*)), this, SLOT(elementTreeItemChanged(QTreeWidgetItem*,QTreeWidgetItem*)));
 
-    QDockWidget *elementsdock = new QDockWidget(tr("Elements"), this);
+    elementsdock = new QDockWidget(tr("Elements"), this);
     elementsdock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     elementsdock->setWidget(elementTree);
     elementsdock->setObjectName("Elements");
@@ -324,6 +341,7 @@ void MainWindow::createGui()
     timeline->setMinimumHeight(110);
 
     connect(timeline, SIGNAL(itemSelectionChanged(ResizeableItem *)), this, SLOT(timelineSelectionChanged(ResizeableItem*)));
+    connect(timeline, SIGNAL(transitionSelectionChanged(KeyFrame*)), this, SLOT(transitionSelectionChanged(KeyFrame*)));
     connect(m_itemPropertyEditor, SIGNAL(addKeyFrame(ResizeableItem*,QString,QVariant)), timeline, SLOT(addKeyFrame(ResizeableItem*,QString,QVariant)));
 
     QSplitter *splitter = new QSplitter(Qt::Vertical);
@@ -388,13 +406,80 @@ void MainWindow::readSettings()
     }
 }
 
+void MainWindow::importXml()
+{
+    QString fileName;
+    QFileDialog *dialog = new QFileDialog();
+    dialog->setFileMode(QFileDialog::AnyFile);
+    dialog->setNameFilter(tr("XML format (*.xml);;All Files (*)"));
+    dialog->setWindowTitle(tr("Import XML"));
+    dialog->setOption(QFileDialog::DontUseNativeDialog, true);
+    dialog->setAcceptMode(QFileDialog::AcceptOpen);
+    if(dialog->exec())
+        fileName = dialog->selectedFiles().first();
+    delete dialog;
+    if (fileName.isEmpty())
+        return;
+
+    QFile file(fileName);
+    if(!file.open(QIODevice::ReadOnly))
+    {
+        QMessageBox::warning(this, "Error", "Unable to open file " + fileName);
+        return;
+    }
+    QDomDocument doc;
+    if (!doc.setContent(&file))
+    {
+        QMessageBox::warning(this, "Error", "Unable to read file " + fileName);
+        file.close();
+        return;
+    }
+    file.close();
+
+    QDomElement docElem = doc.documentElement();
+    if(docElem.nodeName() == "Animation")
+        reset();
+
+    scene->readXml(&doc);
+
+    fillTree();
+    elementTree->expandAll();
+    m_scenePropertyEditor->setScene(scene);
+    timeline->expandTree();
+}
+
+void MainWindow::exportXml()
+{
+    QString fileName;
+    QFileDialog *dialog = new QFileDialog();
+    dialog->setFileMode(QFileDialog::AnyFile);
+    dialog->setNameFilter(tr("XML format (*.xml);;All Files (*)"));
+    dialog->setWindowTitle(tr("Export Animation to XML"));
+    dialog->setOption(QFileDialog::DontUseNativeDialog, true);
+    dialog->setAcceptMode(QFileDialog::AcceptSave);
+    if(dialog->exec())
+        fileName = dialog->selectedFiles().first();
+    delete dialog;
+    if(fileName.isEmpty())
+        return;
+
+    QFile file(fileName);
+    if(!file.open(QIODevice::WriteOnly))
+    {
+        QMessageBox::warning(this, "Error", "Unable to open file " + fileName);
+        return;
+    }
+    scene->writeXml(&file);
+    file.close();
+}
+
 void MainWindow::exportAnimation()
 {
     QString fileName;
     QFileDialog *dialog = new QFileDialog();
     dialog->setFileMode(QFileDialog::AnyFile);
     dialog->setNameFilter(tr("Video format (*.mpg *.mp4 *.avi);;All Files (*)"));
-    dialog->setWindowTitle(tr("Export Animation"));
+    dialog->setWindowTitle(tr("Export Animation to Movie"));
     dialog->setOption(QFileDialog::DontUseNativeDialog, true);
     dialog->setAcceptMode(QFileDialog::AcceptSave);
     if(dialog->exec())
@@ -436,8 +521,14 @@ void MainWindow::createActions()
     saveAsAct = new QAction(tr("Save &As..."), this);
     connect(saveAsAct, SIGNAL(triggered()), this, SLOT(saveAs()));
 
-    exportAct = new QAction(tr("&Export"), this);
+    importXmlAct = new QAction(tr("&Import XML"), this);
+    connect(importXmlAct, SIGNAL(triggered()), this, SLOT(importXml()));
+
+    exportAct = new QAction(tr("&Export Movie"), this);
     connect(exportAct, SIGNAL(triggered()), this, SLOT(exportAnimation()));
+
+    exportXmlAct = new QAction(tr("&Export XML"), this);
+    connect(exportXmlAct, SIGNAL(triggered()), this, SLOT(exportXml()));
 
     exitAct = new QAction(tr("E&xit"), this);
     exitAct->setShortcuts(QKeySequence::Quit);
@@ -462,11 +553,17 @@ void MainWindow::createActions()
     delAct->setShortcut(QKeySequence::Delete);
     connect(delAct, SIGNAL(triggered()), this, SLOT(del()));
 
+    showElementsAct = new QAction("Elements");
+    connect(showElementsAct, SIGNAL(triggered()), this, SLOT(showElementsPanel()));
+
     showPropertyPanelAct = new QAction("Properties");
     connect(showPropertyPanelAct, SIGNAL(triggered()), this, SLOT(showPropertyPanel()));
 
     showToolPanelAct = new QAction("Tools");
     connect(showToolPanelAct, SIGNAL(triggered()), this, SLOT(showToolPanel()));
+
+    showNewsPanelAct = new QAction("News");
+    connect(showNewsPanelAct, SIGNAL(triggered()), this, SLOT(showNewsPanel()));
 
     aboutAct = new QAction(tr("&About"), this);
     connect(aboutAct, SIGNAL(triggered()), this, SLOT(about()));
@@ -484,7 +581,10 @@ void MainWindow::createMenus()
     fileMenu->addAction(openAct);
     fileMenu->addAction(saveAct);
     fileMenu->addAction(saveAsAct);
+    fileMenu->addAction(importXmlAct);
     fileMenu->addAction(exportAct);
+    fileMenu->addAction(exportXmlAct);
+
     fileMenu->addSeparator();
     fileMenu->addAction(exitAct);
 
@@ -497,7 +597,9 @@ void MainWindow::createMenus()
 
     viewMenu = menuBar()->addMenu(tr("&View"));
     viewMenu->addAction(showToolPanelAct);
+    viewMenu->addAction(showElementsAct);
     viewMenu->addAction(showPropertyPanelAct);
+    viewMenu->addAction(showNewsPanelAct);
 
     menuBar()->addSeparator();
 
@@ -512,13 +614,11 @@ void MainWindow::createMenus()
 
 void MainWindow::about()
 {
-    //QMessageBox::about(this, tr("About AnimationMaker (Community Edition)"),
-    //                   tr("The AnimationMaker is a tool to create presentation videos.\nVersion: ") + QCoreApplication::applicationVersion() + "\n(C) Copyright 2017 Olaf Japp. All rights reserved.\n\nThe program is provided AS IS with NO WARRANTY OF ANY KIND, INCLUDING THE WARRANTY OF DESIGN, MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.\n\nTHIS COMMUNITY EDITION IS FOR NON COMMERCIAL USAGE ONLY!");
-    QMessageBox *msg = new QMessageBox(this);
-    msg->setWindowTitle("About AnimationMaker (Community Edition)");
-    msg->setText("The AnimationMaker is a tool to create presentation videos.\nVersion: " + QCoreApplication::applicationVersion() + "\n(C) Copyright 2017 Olaf Japp. All rights reserved.\n\nThe program is provided AS IS with NO WARRANTY OF ANY KIND, INCLUDING THE WARRANTY OF DESIGN, MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.\n\nTHIS COMMUNITY EDITION IS FOR NON COMMERCIAL USAGE ONLY!");
-    msg->setIconPixmap(QPixmap(":/images/logo.png"));
-    msg->show();
+    QMessageBox msg;
+    msg.setWindowTitle("About AnimationMaker (Community Edition)");
+    msg.setText("AnimationMaker\nVersion: " + QCoreApplication::applicationVersion() + "\n(C) Copyright 2017 Olaf Japp. All rights reserved.\n\nThe program is provided AS IS with NO WARRANTY OF ANY KIND, INCLUDING THE WARRANTY OF DESIGN, MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.\n\nTHIS COMMUNITY EDITION IS FOR NON COMMERCIAL USAGE ONLY!");
+    msg.setIconPixmap(QPixmap(":/images/logo.png"));
+    msg.exec();
 }
 
 void MainWindow::setSelectMode()
@@ -623,6 +723,16 @@ void MainWindow::showToolPanel()
     tooldock->setVisible(true);
 }
 
+void MainWindow::showElementsPanel()
+{
+    elementsdock->setVisible(true);
+}
+
+void MainWindow::showNewsPanel()
+{
+    newsdock->setVisible(true);
+}
+
 void MainWindow::copy()
 {
     scene->copyItem();
@@ -656,4 +766,16 @@ void MainWindow::sceneItemRemoved(ResizeableItem *item)
         }
     }
     timeline->removeItem(item);
+}
+
+void MainWindow::transitionSelectionChanged(KeyFrame *frame)
+{
+    if(frame)
+    {
+        scene->clearSelection();
+        m_transitionEditor->setKeyframe(frame);
+        propertiesdock->setWidget(m_transitionEditor);
+    }
+    else
+        propertiesdock->setWidget(m_scenePropertyEditor);
 }

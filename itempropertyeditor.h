@@ -24,15 +24,15 @@
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QLabel>
-#include "resizeableitem.h"
-#include "expander.h"
-#include "text.h"
-#include "rectangle.h"
-#include "ellipse.h"
-#include "colorpicker.h"
-#include "colorrect.h"
-#include "coloreditor.h"
+#include <QFontDatabase>
+#include <QComboBox>
 
+class ResizeableItem;
+class Text;
+class ColorEditor;
+class Expander;
+class Rectangle;
+class Ellipse;
 class ItemPropertyEditor : public QWidget
 {
     Q_OBJECT
@@ -46,9 +46,14 @@ signals:
 
 private:
     bool m_initializing;
+    QFontDatabase m_fontdatabase;
     ColorEditor *colorEditor;
     ColorEditor *borderColorEditor;
     ColorEditor *textcolorEditor;
+    Rectangle *m_rectangle;
+    QComboBox *m_font;
+    QComboBox *m_fontSize;
+    QComboBox *m_style;
     QLineEdit *m_id;
     QSpinBox *m_x;
     QSpinBox *m_y;
@@ -62,7 +67,7 @@ private:
     Expander *expColor;
     ResizeableItem *m_item;
     Text *m_textitem;
-    Rectangle *m_rectangle;
+
     Ellipse *m_ellipse;
     QSlider *m_opacity;
 
@@ -70,7 +75,7 @@ private:
     void changeOpacity(int opacity);
 
 private slots:
-    void idChanged(QString value);
+    void idChanged();
     void idChanged(ResizeableItem*,QString);
     void brushChanged(QColor color);
     void penChanged(QColor color);
@@ -93,6 +98,9 @@ private slots:
     void colorChanged(QColor);
     void borderColorChanged(QColor);
     void textColorChanged(QColor);
+    void fontFamilyChanged(int index);
+    void fontStyleChanged(int index);
+    void fontSizeChanged();
  };
 
 #endif // ITEMPROPERTYEDITOR_H

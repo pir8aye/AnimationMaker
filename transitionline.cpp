@@ -31,6 +31,7 @@ TransitionLine::TransitionLine(ResizeableItem *item, QString propertyName)
 {
     m_item = item;
     m_frame = NULL;
+    m_selectedFrame = NULL;
     m_propertyName = propertyName;
     m_playheadPosition = 0;
     m_pressed = false;
@@ -49,6 +50,7 @@ TransitionLine::TransitionLine(ResizeableItem *item, QString propertyName)
     m_transitionAct = new QAction("Create transition");
     m_delKeyframeAct = new QAction("Delete keyframe");
     m_delTransitionAct = new QAction("Delete transition");
+
     connect(m_transitionAct, SIGNAL(triggered(bool)), this, SLOT(addTransition()));
     connect(m_delKeyframeAct, SIGNAL(triggered(bool)), this, SLOT(deleteKeyframe()));
     connect(m_delTransitionAct, SIGNAL(triggered(bool)), this, SLOT(deleteTransition()));
@@ -57,11 +59,14 @@ TransitionLine::TransitionLine(ResizeableItem *item, QString propertyName)
     connect(this, SIGNAL(customContextMenuRequested(const QPoint &)), this, SLOT(onCustomContextMenu(const QPoint &)));
     connect(item, SIGNAL(positionChanged(qreal,qreal)), this, SLOT(update()));
     connect(item, SIGNAL(sizeChanged(qreal,qreal)), this, SLOT(update()));
+    connect(item, SIGNAL(opacityChanged(int)), this, SLOT(update()));
 }
 
 void TransitionLine::paintEvent(QPaintEvent *)
 {
-    QColor orange(255, 102, 0, 150);
+    QColor orange(255, 127, 42, 150);
+    QColor orangeSelected(255, 127, 42, 255);
+    QColor color;
     QColor gray;
     if(m_propertyName.isEmpty())
         gray = QColor(76, 78, 80);
@@ -87,7 +92,11 @@ void TransitionLine::paintEvent(QPaintEvent *)
         {
             if(frame->easing() >= 0)
             {
-                painter.fillRect(frame->time() / 5 - offset, 1, (frame->next()->time() - frame->time()) / 5, height - 1, orange);
+                if(m_selectedFrame == frame)
+                    color = orangeSelected;
+                else
+                    color = orange;
+                painter.fillRect(frame->time() / 5 - offset, 1, (frame->next()->time() - frame->time()) / 5, height - 1, color);
                 painter.drawImage(frame->time() / 5 - offset, 1, m_imageLeft);
                 painter.drawImage(frame->next()->time() / 5 - 5 - offset, 1, m_imageRight);
             }
@@ -121,6 +130,16 @@ void TransitionLine::mousePressEvent(QMouseEvent *ev)
                     m_oldx = ev->pos().x();
                     m_frame = frame;
                     m_pressed = true;
+                    m_selectedFrame = NULL;
+                    update();
+                    emit transitionSelected(NULL);
+                    break;
+                }
+                else if(ev->pos().x() + offset > pos + 11 && frame->next() && frame->easing() >= 0 && ev->pos().x() + offset < frame->next()->time() / 5 - 6)
+                {
+                    m_selectedFrame = frame;
+                    update();
+                    emit transitionSelected(frame);
                     break;
                 }
             }

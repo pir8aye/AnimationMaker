@@ -31,6 +31,9 @@ AddItemCommand::AddItemCommand(qreal x, qreal y, AnimationScene::EditMode mode, 
     m_scene = scene;
     switch(mode)
     {
+        case AnimationScene::EditMode::ModeSelect:
+            // ignore
+            break;
         case AnimationScene::EditMode::ModeRectangle:
         {
             m_item = new Rectangle(50, 50, m_scene);
@@ -113,14 +116,13 @@ DeleteItemCommand::DeleteItemCommand(ResizeableItem *item, AnimationScene *scene
 
 void DeleteItemCommand::undo()
 {
-    m_scene->clearSelection();
     m_scene->addItem(m_item);
     emit m_scene->itemAdded(m_item);
 }
 
 void DeleteItemCommand::redo()
 {
-    m_scene->clearSelection();
+    m_item->setSelected(false);
     m_scene->removeItem(m_item);
     emit m_scene->itemRemoved(m_item);
 }
@@ -426,4 +428,110 @@ void DeleteTransitionCommand::undo()
 void DeleteTransitionCommand::redo()
 {
     m_timeline->deleteTransition(m_item, m_propertyName, m_frame);
+}
+
+ChangeEasingCommand::ChangeEasingCommand(int easing, int oldeasing, KeyFrame *frame, QUndoCommand *parent)
+    : QUndoCommand(parent)
+{
+    m_easing = easing;
+    m_oldeasing = oldeasing;
+    m_frame = frame;
+    setText("Change  Easing");
+}
+
+void ChangeEasingCommand::undo()
+{
+    m_frame->setEasing(m_oldeasing);
+}
+
+void ChangeEasingCommand::redo()
+{
+    m_frame->setEasing(m_easing);
+}
+
+ChangeFontCommand::ChangeFontCommand(QFont font, QFont oldfont, Text *text, QUndoCommand *parent)
+    : QUndoCommand(parent)
+{
+    m_font = font;
+    m_oldfont = oldfont;
+    m_textitem = text;
+    setText("Change  Font");
+}
+
+void ChangeFontCommand::undo()
+{
+    m_textitem->setFont(m_oldfont);
+}
+
+void ChangeFontCommand::redo()
+{
+    m_textitem->setFont(m_font);
+}
+
+RaiseItemCommand::RaiseItemCommand(ResizeableItem *item, QUndoCommand *parent)
+    : QUndoCommand(parent)
+{
+    m_item = item;
+    setText("Raise " + getItemTypeName(item));
+}
+
+void RaiseItemCommand::undo()
+{
+    m_item->lower();
+}
+
+void RaiseItemCommand::redo()
+{
+    m_item->raise();
+}
+
+LowerItemCommand::LowerItemCommand(ResizeableItem *item, QUndoCommand *parent)
+    : QUndoCommand(parent)
+{
+    m_item = item;
+    setText("Lower " + getItemTypeName(item));
+}
+
+void LowerItemCommand::undo()
+{
+    m_item->raise();
+}
+
+void LowerItemCommand::redo()
+{
+    m_item->lower();
+}
+
+BringItemToFrontCommand::BringItemToFrontCommand(ResizeableItem *item, QUndoCommand *parent)
+    : QUndoCommand(parent)
+{
+    m_item = item;
+    setText("Bring " + getItemTypeName(item) + " to front");
+}
+
+void BringItemToFrontCommand::undo()
+{
+    m_item->sendToBack();
+}
+
+void BringItemToFrontCommand::redo()
+{
+    m_item->bringToFront();
+}
+
+SendItemToBackCommand::SendItemToBackCommand(ResizeableItem *item, QUndoCommand *parent)
+    : QUndoCommand(parent)
+{
+    m_item = item;
+    setText("Send " + getItemTypeName(item) + " to back");
+}
+
+void SendItemToBackCommand::undo()
+{
+    m_item->bringToFront();
+}
+
+void SendItemToBackCommand::redo()
+{
+    m_item->sendToBack();
 }

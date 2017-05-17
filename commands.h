@@ -247,5 +247,78 @@ private:
     Timeline *m_timeline;
 };
 
+class ChangeEasingCommand : public QUndoCommand
+{
+public:
+    ChangeEasingCommand(int easing, int oldeasing, KeyFrame *frame, QUndoCommand *parent = 0);
+
+    void undo() override;
+    void redo() override;
+
+private:
+    KeyFrame *m_frame;
+    int m_easing, m_oldeasing;
+};
+
+class ChangeFontCommand : public QUndoCommand
+{
+public:
+    ChangeFontCommand(QFont font, QFont oldfont, Text *text, QUndoCommand *parent = 0);
+
+    void undo() override;
+    void redo() override;
+
+private:
+    Text *m_textitem;
+    QFont m_font, m_oldfont;
+};
+
+class RaiseItemCommand : public QUndoCommand
+{
+public:
+    RaiseItemCommand(ResizeableItem *item, QUndoCommand *parent = 0);
+
+    void undo() override;
+    void redo() override;
+
+private:
+    ResizeableItem *m_item;
+};
+
+class LowerItemCommand : public QUndoCommand
+{
+public:
+    LowerItemCommand(ResizeableItem *item, QUndoCommand *parent = 0);
+
+    void undo() override;
+    void redo() override;
+
+private:
+    ResizeableItem *m_item;
+};
+
+class BringItemToFrontCommand : public QUndoCommand
+{
+public:
+    BringItemToFrontCommand(ResizeableItem *item, QUndoCommand *parent = 0);
+
+    void undo() override;
+    void redo() override;
+
+private:
+    ResizeableItem *m_item;
+};
+
+class SendItemToBackCommand : public QUndoCommand
+{
+public:
+    SendItemToBackCommand(ResizeableItem *item, QUndoCommand *parent = 0);
+
+    void undo() override;
+    void redo() override;
+
+private:
+    ResizeableItem *m_item;
+};
 
 #endif // COMMANDS_H

@@ -22,19 +22,17 @@
 #    along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
 
 QT += core gui svg
-QT += testlib
+QT += testlib xml network
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 TARGET = AnimationMaker
 TEMPLATE = app
-DESTDIR += usr/bin
-target.path += /usr/bin
+target.path += /bin
 INSTALLS += target
 
 SOURCES += main.cpp\
         mainwindow.cpp \
-    encode.cpp \
     animationscene.cpp \
     rectangle.cpp \
     itemhandle.cpp \
@@ -55,7 +53,10 @@ SOURCES += main.cpp\
     colorrect.cpp \
     commands.cpp \
     exception.cpp \
-    coloreditor.cpp
+    coloreditor.cpp \
+    transitioneditor.cpp \
+    encode.cpp \
+    news.cpp
 
 HEADERS  += mainwindow.h \
     animationscene.h \
@@ -78,21 +79,29 @@ HEADERS  += mainwindow.h \
     colorrect.h \
     commands.h \
     exception.h \
-    coloreditor.h
+    coloreditor.h \
+    transitioneditor.h \
+    news.h \
+    encode.h
 
-INCLUDEPATH += $$PWD/../../ffmpeg-3.2.2
-
-LIBS += -L$$PWD/lib/
+linux-g++ {
+    LIBS += -L$$PWD/lib/
+    INCLUDEPATH += $$PWD/../../ffmpeg-3.2.2
+    LIBS += -lm
+    LIBS += -ldl
+}
+win32 {
+    LIBS += -L$$PWD/../ffmpeg-3.2.4-win64-dev/lib/
+    INCLUDEPATH += "C:\SourceCode\ffmpeg-3.2.4-win64-dev\include"
+}
 
 
 LIBS += -lavutil
 LIBS += -lavformat
 LIBS += -lavcodec
 LIBS += -lswresample
-LIBS += -lavfilter
 LIBS += -lswscale
-LIBS += -lm
-LIBS += -ldl
+
 
 RESOURCES += \
     images.qrc
@@ -101,7 +110,12 @@ DISTFILES += \
     todo.txt \
     Deploy/AppImage/default.desktop \
     Deploy/AppImage/create.sh \
-    Deploy/AppImage/default.png
+    Deploy/AppImage/default.png \
+    Deploy/snapcraft/snap/snapcraft.yaml \
+    Deploy/snapcraft/snap/gui/animationmaker.desktop \
+    Deploy/snapcraft/snap/gui/icon.png \
+    changelog.txt \
+    build.txt \
+    Deploy/snapcraft/bin/xdg-open
 
 FORMS +=
-

@@ -20,6 +20,7 @@
 
 #include "animationscene.h"
 #include "rectangle.h"
+#include "resizeableitem.h"
 #include "ellipse.h"
 #include "text.h"
 #include "bitmap.h"
@@ -27,6 +28,7 @@
 #include "keyframe.h"
 #include "commands.h"
 #include <QUndoCommand>
+#include <QBuffer>
 
 AnimationScene::AnimationScene()
 {
@@ -44,7 +46,6 @@ void AnimationScene::initialize()
     m_playheadPosition = 0;
     m_tempKeyFrame = NULL;
     m_movingItem = NULL;
-
     addBackgroundRect();
 }
 
@@ -70,9 +71,15 @@ void AnimationScene::mousePressEvent(QGraphicsSceneMouseEvent *mouseEvent)
     {
         QPointF mousePos(mouseEvent->buttonDownScenePos(Qt::LeftButton).x(), mouseEvent->buttonDownScenePos(Qt::LeftButton).y());
         const QList<QGraphicsItem *> itemList = items(mousePos);
-        m_movingItem = itemList.isEmpty() ? 0 : dynamic_cast<ResizeableItem*>(itemList.first());
-        if(m_movingItem)
-            m_oldPos = m_movingItem->pos();
+        for(int i=0; i < itemList.count(); i++)
+        {
+            m_movingItem = dynamic_cast<ResizeableItem*>(itemList.at(i));
+            if(m_movingItem)
+            {
+                m_oldPos = m_movingItem->pos();
+                break;
+            }
+        }
         QGraphicsScene::mousePressEvent(mouseEvent);
     }
     else
@@ -142,6 +149,41 @@ void AnimationScene::addBackgroundRect()
     addItem(m_rect);
 }
 
+void AnimationScene::readKeyframes(QDomElement *element, ResizeableItem *item)
+{
+    m_tempKeyFrame = NULL;
+    for(int i=0; i < element->childNodes().count(); i++)
+    {
+        QDomNode node = element->childNodes().at(i);
+        if(node.nodeName() == "Keyframes")
+        {
+            QDomElement keyframes = node.toElement();
+            for(int j=0; j < node.childNodes().count(); j++)
+            {
+                QDomNode frameNode = node.childNodes().at(j);
+                if(frameNode.nodeName() == "Keyframe")
+                {
+                    QDomElement keyframe = frameNode.toElement();
+                    KeyFrame *key = new KeyFrame();
+                    key->setTime(keyframe.attribute("time", "0").toInt());
+                    key->setValue(keyframe.attribute("value"));
+                    key->setEasing(keyframe.attribute("easing", "-1").toInt());
+                    item->addKeyframe(keyframes.attribute("property"), key);
+                    // set double linked list
+                    if(m_tempKeyFrame)
+                    {
+                        m_tempKeyFrame->setNext(key);
+                        key->setPrev(m_tempKeyFrame);
+                    }
+                    m_tempKeyFrame = key;
+                    emit keyframeAdded(item, keyframes.attribute("property"), key);
+                }
+            }
+            m_tempKeyFrame = NULL;
+        }
+    }
+}
+
 void AnimationScene::readKeyframes(QDataStream &dataStream, ResizeableItem *item)
 {
     int vars, easing, time, keyframes;
@@ -150,12 +192,12 @@ void AnimationScene::readKeyframes(QDataStream &dataStream, ResizeableItem *item
 
     m_tempKeyFrame = NULL;
     dataStream >> vars;
-    qDebug() << "read" << vars;
 
     for(int i=0; i < vars; i++)
     {
         dataStream >> propertyName;
         dataStream >> keyframes;
+
         for(int j=0; j < keyframes; j++)
         {
             dataStream >> time;
@@ -165,6 +207,7 @@ void AnimationScene::readKeyframes(QDataStream &dataStream, ResizeableItem *item
             key->setTime(time);
             key->setValue(value);
             key->setEasing(easing);
+
             item->addKeyframe(propertyName, key);
             // set double linked list
             if(m_tempKeyFrame)
@@ -174,6 +217,100 @@ void AnimationScene::readKeyframes(QDataStream &dataStream, ResizeableItem *item
             }
             m_tempKeyFrame = key;
             emit keyframeAdded(item, propertyName, key);
+        }
+        m_tempKeyFrame = NULL;
+    }
+}
+
+void AnimationScene::readXml(QDomDocument *doc)
+{
+    QDomElement docElem = doc->documentElement();
+    if(docElem.nodeName() == "Animation")
+    {
+        setFps(docElem.attribute("fps", "24").toInt());
+        setWidth(docElem.attribute("width", "1200").toInt());
+        setHeight(docElem.attribute("height", "720").toInt());
+    }
+    for(int i=0; i < docElem.childNodes().count(); i++)
+    {
+        QDomNode node =docElem.childNodes().at(i);
+        if(node.nodeName() == "Rectangle")
+        {
+            QDomElement ele = node.toElement();
+            Rectangle *r = new Rectangle(ele.attribute("width", "50").toDouble(), ele.attribute("height", "50").toDouble(), this);
+            r->setId(ele.attribute("id", "Rectangle"));
+            r->setPos(ele.attribute("left", "0").toDouble(), ele.attribute("top", "0").toDouble());
+            r->setPen(QPen(ele.attribute("pen", "#000000")));
+            r->setBrush(QBrush(QColor(ele.attribute("brush", "#0000FF"))));
+            r->setFlag(QGraphicsItem::ItemIsMovable, true);
+            r->setFlag(QGraphicsItem::ItemIsSelectable, true);
+            r->setOpacity(ele.attribute("opacity", "100").toInt());
+            readKeyframes(&ele, r);
+            addItem(r);
+        }
+        else if(node.nodeName() == "Ellipse")
+        {
+            QDomElement ele = node.toElement();
+            Ellipse *e = new Ellipse(ele.attribute("width", "50").toDouble(), ele.attribute("height", "50").toDouble(), this);
+            e->setId(ele.attribute("id", "Ellipse"));
+            e->setPos(ele.attribute("left", "0").toDouble(), ele.attribute("top", "0").toDouble());
+            e->setPen(QPen(ele.attribute("pen", "#000000")));
+            e->setBrush(QBrush(QColor(ele.attribute("brush", "#0000FF"))));
+            e->setFlag(QGraphicsItem::ItemIsMovable, true);
+            e->setFlag(QGraphicsItem::ItemIsSelectable, true);
+            e->setOpacity(ele.attribute("opacity", "100").toInt());
+            readKeyframes(&ele, e);
+            addItem(e);
+        }
+        else if(node.nodeName() == "Text")
+        {
+            QDomElement ele = node.toElement();
+            Text *t = new Text(ele.attribute("text"), this);
+            t->setId(ele.attribute("id", "Text"));
+            t->setPos(ele.attribute("left", "0").toDouble(), ele.attribute("top", "0").toDouble());
+            t->setFlag(QGraphicsItem::ItemIsMovable, true);
+            t->setFlag(QGraphicsItem::ItemIsSelectable, true);
+            t->setScale(ele.attribute("xscale", "1").toDouble(), ele.attribute("yscale", "1").toDouble());
+            t->setTextcolor(ele.attribute("textcolor", "#000000"));
+            t->setOpacity(ele.attribute("opacity", "100").toInt());
+            QFont font;
+            font.setFamily(ele.attribute("font-family"));
+            font.setPointSize(ele.attribute("font-size").toInt());
+            font.setStyleName(ele.attribute("font-style"));
+            t->setFont(font);
+            readKeyframes(&ele, t);
+            addItem(t);
+        }
+        else if(node.nodeName() == "Bitmap")
+        {
+            QDomElement ele = node.toElement();
+            QDomNode data = ele.firstChild();
+            QDomCDATASection cdata = data.toCDATASection();
+            QImage img = QImage::fromData(QByteArray::fromBase64(cdata.data().toLatin1()), "PNG");
+            Bitmap *b = new Bitmap(img, ele.attribute("width", "50").toDouble(), ele.attribute("height", "50").toDouble(), this);
+            b->setId(ele.attribute("id", "Bitmap"));
+            b->setPos(ele.attribute("left", "0").toDouble(), ele.attribute("top", "0").toDouble());
+            b->setFlag(QGraphicsItem::ItemIsMovable, true);
+            b->setFlag(QGraphicsItem::ItemIsSelectable, true);
+            b->setScale(ele.attribute("xscale", "1").toDouble(), ele.attribute("yscale", "1").toDouble());
+            b->setOpacity(ele.attribute("opacity", "100").toInt());
+            readKeyframes(&ele, b);
+            addItem(b);
+        }
+        else if(node.nodeName() == "Vectorgraphic")
+        {
+            QDomElement ele = node.toElement();
+            QDomNode data = ele.firstChild();
+            QDomCDATASection cdata = data.toCDATASection();
+            Vectorgraphic *v = new Vectorgraphic(cdata.data().toLatin1(), this);
+            v->setId(ele.attribute("id", "Vectorgraphic"));
+            v->setPos(ele.attribute("left", "0").toDouble(), ele.attribute("top", "0").toDouble());
+            v->setFlag(QGraphicsItem::ItemIsMovable, true);
+            v->setFlag(QGraphicsItem::ItemIsSelectable, true);
+            v->setScale(ele.attribute("xscale", "1").toDouble(), ele.attribute("yscale", "1").toDouble());
+            v->setOpacity(ele.attribute("opacity", "100").toInt());
+            readKeyframes(&ele, v);
+            addItem(v);
         }
     }
 }
@@ -186,6 +323,7 @@ QDataStream& AnimationScene::read(QDataStream &dataStream)
     QBrush brush;
     QString text, id;
     QColor color, bgColor;
+    QFont font;
 
     clear();
 
@@ -262,6 +400,7 @@ QDataStream& AnimationScene::read(QDataStream &dataStream)
             dataStream >> text;
             dataStream >> color;
             dataStream >> opacity;
+            dataStream >> font;
 
             Text *t = new Text(text, this);
             t->setId(id);
@@ -271,6 +410,7 @@ QDataStream& AnimationScene::read(QDataStream &dataStream)
             t->setScale(xscale, yscale);
             t->setTextcolor(color);
             t->setOpacity(opacity);
+            t->setFont(font);
 
             readKeyframes(dataStream, t);
 
@@ -328,7 +468,6 @@ QDataStream& AnimationScene::read(QDataStream &dataStream)
 
 void AnimationScene::writeKeyframes(QDataStream &dataStream, ResizeableItem *item) const
 {
-    qDebug() << "write" << item->keyframes()->count();
     dataStream << item->keyframes()->count();
     QHash<QString, KeyFrame*>::iterator it;
     for(it = item->keyframes()->begin(); it != item->keyframes()->end(); it++)
@@ -347,6 +486,147 @@ void AnimationScene::writeKeyframes(QDataStream &dataStream, ResizeableItem *ite
             dataStream << frame->easing();
         }
     }
+}
+
+void AnimationScene::writeKeyframes(QDomDocument *doc, QDomElement *element, ResizeableItem *item)
+{
+    QHash<QString, KeyFrame*>::iterator it;
+    for(it = item->keyframes()->begin(); it != item->keyframes()->end(); it++)
+    {
+        QDomElement frames = doc->createElement("Keyframes");
+        frames.setAttribute("property", it.key());
+        for(KeyFrame *frame = it.value(); frame != NULL; frame = frame->next())
+        {
+            QDomElement f = doc->createElement("Keyframe");
+            f.setAttribute("time", frame->time());
+            f.setAttribute("value", frame->value().toString());
+            f.setAttribute("easing", frame->easing());
+            frames.appendChild(f);
+        }
+        element->appendChild(frames);
+    }
+}
+
+/*
+ * If there are no items selected, then the whole scene will be exported to XML.
+ * Otherwise only the selected items and not the scene will be exported to XML.
+ */
+void AnimationScene::writeXml(QFile *file)
+{   
+    QDomDocument doc;
+    QDomElement root;
+    bool exportAll = selectedItems().count() == 0;
+
+    if(exportAll)
+    {
+        root = doc.createElement("Animation");
+        root.setAttribute("fps", fps());
+        root.setAttribute("width", width());
+        root.setAttribute("height", height());
+        doc.appendChild(root);
+    }
+    else
+    {
+        root = doc.createElement("AnimationItems");
+        doc.appendChild(root);
+    }
+
+    QList<QGraphicsItem*> itemList = items(Qt::AscendingOrder);
+    foreach (QGraphicsItem *item, itemList)
+    {
+        if(exportAll || item->isSelected())
+        {
+            switch(item->type())
+            {
+                case Rectangle::Type:
+                {
+                    Rectangle *r = dynamic_cast<Rectangle *>(item);
+                    QDomElement rect = doc.createElement("Rectangle");
+                    rect.setAttribute("id", r->id());
+                    rect.setAttribute("left", QVariant(r->pos().x()).toString());
+                    rect.setAttribute("top", QVariant(r->pos().y()).toString());
+                    rect.setAttribute("width", QVariant(r->rect().width()).toString());
+                    rect.setAttribute("height", QVariant(r->rect().height()).toString());
+                    rect.setAttribute("pen", r->pen().color().name());
+                    rect.setAttribute("brush", r->brush().color().name());
+                    rect.setAttribute("opacity", r->opacity());
+                    writeKeyframes(&doc, &rect, r);
+                    root.appendChild(rect);
+                    break;
+                }
+                case Ellipse::Type:
+                {
+                    Ellipse *e = dynamic_cast<Ellipse *>(item);
+                    QDomElement ellipse = doc.createElement("Ellipse");
+                    ellipse.setAttribute("id", e->id());
+                    ellipse.setAttribute("left", QVariant(e->pos().x()).toString());
+                    ellipse.setAttribute("top", QVariant(e->pos().y()).toString());
+                    ellipse.setAttribute("width", QVariant(e->rect().width()).toString());
+                    ellipse.setAttribute("height", QVariant(e->rect().height()).toString());
+                    ellipse.setAttribute("pen", e->pen().color().name());
+                    ellipse.setAttribute("brush", e->brush().color().name());
+                    ellipse.setAttribute("opacity", e->opacity());
+                    writeKeyframes(&doc, &ellipse, e);
+                    root.appendChild(ellipse);
+                    break;
+                }
+                case Text::Type:
+                {
+                    Text *t = dynamic_cast<Text *>(item);
+                    QDomElement text = doc.createElement("Text");
+                    text.setAttribute("id", t->id());
+                    text.setAttribute("left", QVariant(t->pos().x()).toString());
+                    text.setAttribute("top", QVariant(t->pos().y()).toString());
+                    text.setAttribute("xscale", QVariant(t->xscale()).toString());
+                    text.setAttribute("yscale", QVariant(t->yscale()).toString());
+                    text.setAttribute("text", t->text());
+                    text.setAttribute("textcolor", t->textcolor().name());
+                    text.setAttribute("opacity", t->opacity());
+                    text.setAttribute("font-family", t->font().family());
+                    text.setAttribute("font-size", t->font().pointSize());
+                    text.setAttribute("font-style", t->font().styleName());
+                    writeKeyframes(&doc, &text, t);
+                    root.appendChild(text);
+                    break;
+                }
+                case Bitmap::Type:
+                {
+                    Bitmap *b = dynamic_cast<Bitmap *>(item);
+                    QByteArray byteArray;
+                    QBuffer buffer(&byteArray);
+                    b->getImage().save(&buffer, "PNG");
+                    QDomElement bitmap = doc.createElement("Bitmap");
+                    bitmap.setAttribute("id", b->id());
+                    bitmap.setAttribute("left", QVariant(b->pos().x()).toString());
+                    bitmap.setAttribute("top", QVariant(b->pos().y()).toString());
+                    bitmap.setAttribute("width", QVariant(b->rect().width()).toString());
+                    bitmap.setAttribute("height", QVariant(b->rect().height()).toString());
+                    bitmap.setAttribute("opacity", b->opacity());
+                    bitmap.appendChild(doc.createCDATASection(QString::fromLatin1(byteArray.toBase64().data())));
+                    writeKeyframes(&doc, &bitmap, b);
+                    root.appendChild(bitmap);
+                    break;
+                }
+                case Vectorgraphic::Type:
+                {
+                    Vectorgraphic *v = dynamic_cast<Vectorgraphic *>(item);
+                    QDomElement vectorgraphic = doc.createElement("Vectorgraphic");
+                    vectorgraphic.setAttribute("id", v->id());
+                    vectorgraphic.setAttribute("left", QVariant(v->pos().x()).toString());
+                    vectorgraphic.setAttribute("top", QVariant(v->pos().y()).toString());
+                    vectorgraphic.setAttribute("xscale", QVariant(v->xscale()).toString());
+                    vectorgraphic.setAttribute("yscale", QVariant(v->yscale()).toString());
+                    vectorgraphic.setAttribute("opacity", v->opacity());
+                    vectorgraphic.appendChild(doc.createCDATASection(QString::fromLatin1(v->getData())));
+                    writeKeyframes(&doc, &vectorgraphic, v);
+                    root.appendChild(vectorgraphic);
+                    break;
+                }
+            }
+        }
+    }
+    QTextStream stream(file);
+    stream << doc.toString();
 }
 
 QDataStream& AnimationScene::write(QDataStream &dataStream) const
@@ -405,6 +685,7 @@ QDataStream& AnimationScene::write(QDataStream &dataStream) const
                 dataStream << t->text();
                 dataStream << t->textcolor();
                 dataStream << t->opacity();
+                dataStream << t->font();
 
                 writeKeyframes(dataStream, t);
                 break;
@@ -455,6 +736,36 @@ void AnimationScene::copyItem()
     m_copy = dynamic_cast<ResizeableItem*>(gi);
 }
 
+void AnimationScene::copyKeyframes(ResizeableItem *item)
+{
+    QHash<QString, KeyFrame*>::iterator it;
+    for (it = m_copy->keyframes()->begin(); it != m_copy->keyframes()->end(); ++it)
+    {
+        KeyFrame *first = it.value();
+        KeyFrame *firstFrame = new KeyFrame();
+        firstFrame->setEasing(first->easing());
+        firstFrame->setTime(first->time());
+        firstFrame->setValue(first->value());
+        firstFrame->setNext(NULL);
+        firstFrame->setPrev(NULL);
+        item->addKeyframe(it.key(), firstFrame);
+        KeyFrame *last = firstFrame;
+        for(KeyFrame *frame = first->next(); frame != NULL; frame = frame->next())
+        {
+            KeyFrame *nextFrame = new KeyFrame();
+            nextFrame->setEasing(frame->easing());
+            nextFrame->setTime(frame->time());
+            nextFrame->setValue(frame->value());
+            nextFrame->setNext(NULL);
+            nextFrame->setPrev(last);
+            last->setNext(nextFrame);
+            last = nextFrame;
+            //emit keyframeAdded(item, it.key(), nextFrame);
+        }
+        emit keyframeAdded(item, it.key(), firstFrame);
+    }
+}
+
 void AnimationScene::pasteItem()
 {
     if(m_copy == NULL)
@@ -467,11 +778,12 @@ void AnimationScene::pasteItem()
         {
             Rectangle *r = new Rectangle(m_copy->rect().width(), m_copy->rect().height(), this);
             r->setPos(m_copy->pos().x() + 10, m_copy->pos().y() + 10);
-            r->setId("");
+            r->setId("Rectangle");
             r->setPen(m_copy->pen());
             r->setBrush(m_copy->brush());
             r->setFlag(QGraphicsItem::ItemIsMovable, true);
             r->setFlag(QGraphicsItem::ItemIsSelectable, true);
+            copyKeyframes(r);
             addItem(r);
             emit itemAdded(r);
             break;
@@ -480,11 +792,12 @@ void AnimationScene::pasteItem()
         {
             Ellipse *e = new Ellipse(m_copy->rect().width(), m_copy->rect().height(), this);
             e->setPos(m_copy->pos().x() + 10, m_copy->pos().y() + 10);
-            e->setId("");
+            e->setId("Ellipse");
             e->setPen(m_copy->pen());
             e->setBrush(m_copy->brush());
             e->setFlag(QGraphicsItem::ItemIsMovable, true);
             e->setFlag(QGraphicsItem::ItemIsSelectable, true);
+            copyKeyframes(e);
             addItem(e);
             emit itemAdded(e);
             break;
@@ -493,12 +806,14 @@ void AnimationScene::pasteItem()
         {
             Text *cpy = dynamic_cast<Text*>(m_copy);
             Text *t = new Text(cpy->text(), this);
-            t->setId("");
+            t->setId("Text");
             t->setPos(m_copy->pos().x() + 10, m_copy->pos().y() + 10);
             t->setFlag(QGraphicsItem::ItemIsMovable, true);
             t->setFlag(QGraphicsItem::ItemIsSelectable, true);
-            t->setScale(cpy->xscale(), cpy->yscale());
             t->setTextcolor(cpy->textcolor());
+            t->setFont(cpy->font());
+            t->setScale(cpy->xscale(), cpy->yscale());
+            copyKeyframes(t);
             addItem(t);
             emit itemAdded(t);
             break;
@@ -507,11 +822,12 @@ void AnimationScene::pasteItem()
         {
             Bitmap *bm = dynamic_cast<Bitmap*>(m_copy);
             Bitmap *b = new Bitmap(bm->getImage(), bm->rect().width(), bm->rect().height(), this);
-            b->setId("");
+            b->setId("Bitmap");
             b->setPos(m_copy->pos().x() + 10, m_copy->pos().y() + 10);
             b->setFlag(QGraphicsItem::ItemIsMovable, true);
             b->setFlag(QGraphicsItem::ItemIsSelectable, true);
             b->setScale(bm->xscale(), bm->yscale());
+            copyKeyframes(b);
             addItem(b);
             emit itemAdded(b);
             break;
@@ -520,11 +836,12 @@ void AnimationScene::pasteItem()
         {
             Vectorgraphic *vg = dynamic_cast<Vectorgraphic*>(m_copy);
             Vectorgraphic *v = new Vectorgraphic(vg->getData(), this);
-            v->setId("");
+            v->setId("Vectorgraphic");
             v->setPos(m_copy->pos().x() + 10, m_copy->pos().y() + 10);
             v->setFlag(QGraphicsItem::ItemIsMovable, true);
             v->setFlag(QGraphicsItem::ItemIsSelectable, true);
             v->setScale(vg->xscale(), vg->yscale());
+            copyKeyframes(v);
             addItem(v);
             emit itemAdded(v);
             break;

@@ -1,0 +1,23 @@
+name: animationmaker
+version: '1.1'
+summary: Create animations and export them to a movie or XML file
+description: |
+  This app can be used to create animated movies based on keyframe animations.
+  Parts can be exported and imported to and from XML.
+
+grade: stable
+confinement: strict
+
+apps:
+  animationmaker:
+    command: desktop-launch AnimationMaker
+    plugs: [x11,home,unity7]
+
+parts:
+  animationmaker:
+    plugin: dump
+    prime:
+      - bin/*
+      - lib/*
+    after: [desktop-qt5]
+

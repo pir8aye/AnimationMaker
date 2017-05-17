@@ -19,9 +19,17 @@
 ****************************************************************************/
 
 #include "itempropertyeditor.h"
+#include "resizeableitem.h"
 #include "animationscene.h"
+#include "text.h"
+#include "rectangle.h"
+#include "ellipse.h"
+#include "expander.h"
+#include "coloreditor.h"
 #include "commands.h"
 #include <QPushButton>
+#include <QComboBox>
+#include <QFontDatabase>
 
 ItemPropertyEditor::ItemPropertyEditor()
 {
@@ -30,7 +38,6 @@ ItemPropertyEditor::ItemPropertyEditor()
     m_initializing = false;
 
     QString buttonStyle = "QPushButton{border: none;image:url(:/images/raute.png)} QPushButton:hover{border: none;image:url(:/images/raute-hover.png)} QToolTip{background:#f5f0eb;}";
-
     QVBoxLayout *vbox = new QVBoxLayout();
     Expander *expTyp = new Expander("Typ");
     QGridLayout *layoutTyp = new QGridLayout();
@@ -105,15 +112,33 @@ ItemPropertyEditor::ItemPropertyEditor()
     expText->setVisible(false);
     QGridLayout *layoutText = new QGridLayout();
     QLabel *labelText = new QLabel("Text");
+    QLabel *labelFont = new QLabel("Font");
+    QLabel *labelFontsize = new QLabel("Size");
+    QLabel *labelStyle = new QLabel("Style");
+    labelStyle->setFixedWidth(40);
+    m_fontSize = new QComboBox();
+    m_fontSize->setEditable(true);
+    m_style = new QComboBox();
+    m_font = new QComboBox();
+    QStringList fonts = m_fontdatabase.families();
+    for(int i=0; i < fonts.count(); i++)
+    {
+        m_font->addItem(fonts.at(i), QVariant(fonts.at(i)));
+    }
     m_text = new QLineEdit();
     layoutText->addWidget(labelText, 0, 0);
-    layoutText->addWidget(m_text, 0, 1);
+    layoutText->addWidget(m_text, 0, 1, 1, 3);
+    layoutText->addWidget(labelFont, 1, 0);
+    layoutText->addWidget(m_font, 1, 1, 1, 3);
+    layoutText->addWidget(labelFontsize, 2, 0);
+    layoutText->addWidget(m_fontSize, 2, 1);
+    layoutText->addWidget(labelStyle, 2, 2);
+    layoutText->addWidget(m_style, 2, 3);
     expText->addLayout(layoutText);
     vbox->addWidget(expText);
 
     expTextcolor = new Expander("Textcolor");
     expTextcolor->setVisible(false);
-
 
     QVBoxLayout *layoutTextcolor = new QVBoxLayout();
     textcolorEditor = new ColorEditor("Color");
@@ -150,11 +175,20 @@ ItemPropertyEditor::ItemPropertyEditor()
     layoutOpacity->addWidget(m_opacityText, 0, 3);
     expOpacity->addLayout(layoutOpacity);
     vbox->addWidget(expOpacity);
-
     vbox->addStretch();
-    this->setLayout(vbox);
 
-    connect(m_id, SIGNAL(textChanged(QString)), this, SLOT(idChanged(QString)));
+    QWidget *scrollContent = new QWidget();
+    scrollContent->setLayout(vbox);
+    QScrollArea *scroll = new QScrollArea();
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scroll->setWidget(scrollContent);
+    scroll->setWidgetResizable(true);
+    QVBoxLayout *layout = new QVBoxLayout();
+    layout->addWidget(scroll);
+    this->setLayout(layout);
+
+    connect(m_id, SIGNAL(editingFinished()), this, SLOT(idChanged()));
     connect(m_x, SIGNAL(valueChanged(int)), this, SLOT(xChanged(int)));
     connect(m_y, SIGNAL(valueChanged(int)), this, SLOT(yChanged(int)));
     connect(m_width, SIGNAL(valueChanged(int)), this, SLOT(widthChanged(int)));
@@ -165,11 +199,92 @@ ItemPropertyEditor::ItemPropertyEditor()
     connect(addWidthKeyframe, SIGNAL(clicked(bool)), this, SLOT(addWidthKeyFrame()));
     connect(addHeightKeyframe, SIGNAL(clicked(bool)), this, SLOT(addHeightKeyFrame()));
     connect(m_opacity, SIGNAL(sliderReleased()), this, SLOT(opacitySliderReleased()));
+    connect(m_opacity, SIGNAL(valueChanged(int)), this, SLOT(opacitySliderReleased()));
     connect(m_opacityText, SIGNAL(valueChanged(int)), this, SLOT(opacityTextChanged(int)));
     connect(addOpacityKeyframe, SIGNAL(clicked(bool)), this, SLOT(addOpacityKeyFrame()));
     connect(colorEditor, SIGNAL(colorChanged(QColor)), this, SLOT(colorChanged(QColor)));
     connect(borderColorEditor, SIGNAL(colorChanged(QColor)), this, SLOT(borderColorChanged(QColor)));
     connect(textcolorEditor, SIGNAL(colorChanged(QColor)), this, SLOT(textColorChanged(QColor)));
+    connect(m_font, SIGNAL(currentIndexChanged(int)), this, SLOT(fontFamilyChanged(int)));
+    connect(m_style, SIGNAL(currentIndexChanged(int)), this, SLOT(fontStyleChanged(int)));
+    connect(m_fontSize, SIGNAL(currentTextChanged(QString)), this, SLOT(fontSizeChanged()));
+}
+
+void ItemPropertyEditor::fontFamilyChanged(int index)
+{
+    QString family =  m_font->itemText(index);
+    QString style = m_style->currentText();
+    int size = m_textitem->font().pointSize();
+    QStringList styles = m_fontdatabase.styles(family);
+
+    m_initializing = true;
+    m_style->clear();
+
+    for(int j=0; j < styles.count(); j++)
+    {
+        m_style->addItem(styles.at(j), QVariant(styles.at(j)));
+    }
+    m_style->setCurrentText(style);
+    m_fontSize->clear();
+    QList<int> sizes = m_fontdatabase.smoothSizes(family, m_style->currentText());
+    for(int k=0; k < sizes.count(); k++)
+    {
+        m_fontSize->addItem(QString::number(sizes.at(k)), QVariant(sizes.at(k)));
+    }
+    m_fontSize->setCurrentText(QString::number(size));
+    m_initializing = false;
+
+    QFont font = m_fontdatabase.font(family, m_style->currentText(), m_fontSize->currentText().toInt());
+    AnimationScene *as = dynamic_cast<AnimationScene *>(m_item->scene());
+    if(as)
+    {
+        QUndoStack *undoStack = as->undoStack();
+        QUndoCommand *cmd = new ChangeFontCommand(font, m_textitem->font(), m_textitem);
+        undoStack->push(cmd);
+    }
+}
+
+void ItemPropertyEditor::fontStyleChanged(int index)
+{
+    if(m_initializing)
+        return;
+    QString family =  m_font->itemText(m_font->currentIndex());
+    QString style = m_style->itemText(index);
+    int size = m_textitem->font().pointSize();
+
+    m_initializing = true;
+    m_fontSize->clear();
+    QList<int> sizes = m_fontdatabase.smoothSizes(family, style);
+    for(int k=0; k < sizes.count(); k++)
+    {
+        m_fontSize->addItem(QString::number(sizes.at(k)), QVariant(sizes.at(k)));
+    }
+    m_fontSize->setCurrentText(QString::number(size));
+    m_initializing = false;
+
+    QFont font = m_fontdatabase.font(m_font->currentText(), style, m_fontSize->currentText().toInt());
+    AnimationScene *as = dynamic_cast<AnimationScene *>(m_item->scene());
+    if(as)
+    {
+        QUndoStack *undoStack = as->undoStack();
+        QUndoCommand *cmd = new ChangeFontCommand(font, m_textitem->font(), m_textitem);
+        undoStack->push(cmd);
+    }
+}
+
+void ItemPropertyEditor::fontSizeChanged()
+{
+    if(m_initializing)
+        return;
+
+    QFont font = m_fontdatabase.font(m_font->currentText(), m_style->currentText(), m_fontSize->currentText().toInt());
+    AnimationScene *as = dynamic_cast<AnimationScene *>(m_item->scene());
+    if(as)
+    {
+        QUndoStack *undoStack = as->undoStack();
+        QUndoCommand *cmd = new ChangeFontCommand(font, m_textitem->font(), m_textitem);
+        undoStack->push(cmd);
+    }
 }
 
 void ItemPropertyEditor::colorChanged(QColor color)
@@ -249,6 +364,10 @@ void ItemPropertyEditor::setItem(ResizeableItem *item)
     {
         m_text->setText(m_textitem->text());
         textcolorEditor->setColor(m_textitem->textcolor());
+        QFont f = m_textitem->font();
+        m_font->setCurrentText(f.family());
+        m_style->setCurrentText(f.styleName());
+        m_fontSize->setCurrentText(QString::number(f.pointSize()));
         connect(m_textitem, SIGNAL(textcolorChanged(QColor)), this, SLOT(textcolorChanged(QColor)));
     }
 
@@ -317,7 +436,7 @@ void ItemPropertyEditor::idChanged(ResizeableItem*, QString id)
     m_initializing = false;
 }
 
-void ItemPropertyEditor::idChanged(QString value)
+void ItemPropertyEditor::idChanged()
 {
     if(m_initializing)
         return;
@@ -325,7 +444,7 @@ void ItemPropertyEditor::idChanged(QString value)
     if(as)
     {
         QUndoStack *undoStack = as->undoStack();
-        QUndoCommand *cmd = new ChangeIdCommand(value, m_item->id(), m_item);
+        QUndoCommand *cmd = new ChangeIdCommand(m_id->text(), m_item->id(), m_item);
         undoStack->push(cmd);
     }
 }

@@ -32,10 +32,8 @@ class AnimationScene;
 class ResizeableItem : public QObject, public QGraphicsItem
 {
     Q_OBJECT
-    Q_PROPERTY(qreal opacity READ opacity WRITE setOpacity)
-    Q_PROPERTY(qreal left READ left WRITE setLeft)
-    Q_PROPERTY(qreal top READ top WRITE setTop)
 public:
+    ResizeableItem() {}
     ResizeableItem(AnimationScene *scene);
     ~ResizeableItem();
 
@@ -62,8 +60,7 @@ public:
     void setBrush(const QBrush &brush);
 
     inline int opacity() {return m_opacity;}
-    inline void setOpacity(int opacity) {m_opacity = opacity; QGraphicsItem::setOpacity((qreal)m_opacity / 100); emit opacityChanged(opacity);}
-
+    void setOpacity(int opacity);
     inline qreal left() {return x();}
     inline qreal top() {return y();}
     inline void setLeft(qreal val) {setX(val);}
@@ -81,6 +78,12 @@ public:
     void posChanged(qreal x, qreal y);
 
     inline AnimationScene *scene() {return m_scene;}
+
+    void lower();
+    void raise();
+    void bringToFront();
+    void sendToBack();
+
 
 private:
     AnimationScene *m_scene;
@@ -102,10 +105,10 @@ private:
 
 private slots:
     void deleteItem();
-    void bringToFront();
-    void sendToBack();
-    void lower();
-    void raise();
+    void bringToFrontAction();
+    void sendToBackAction();
+    void lowerAction();
+    void raiseAction();
 
 signals:
     void addPropertyAnimation(ResizeableItem *item, const QString propertyName, qreal value, int min, int max);

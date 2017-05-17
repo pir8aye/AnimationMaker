@@ -24,9 +24,9 @@
 #include <QGraphicsItem>
 #include <QGraphicsRectItem>
 #include <QColor>
-#include "itemhandle.h"
 #include "resizeableitem.h"
 
+class AnimationScene;
 class Text : public ResizeableItem
 {
     Q_OBJECT
@@ -42,6 +42,9 @@ public:
     QColor textcolor();
     void setTextcolor(QColor textcolor);
 
+    inline QFont font() {return m_font;}
+    void setFont(QFont font);
+
     enum { Type = UserType + 3 };
     int type() const Q_DECL_OVERRIDE;
 
@@ -53,6 +56,8 @@ private:
     QString m_text;
     QGraphicsSimpleTextItem *m_textitem;
     QColor m_textcolor;
+    qreal m_width;
+    qreal m_height;
 };
 
 #endif // TEXT_H

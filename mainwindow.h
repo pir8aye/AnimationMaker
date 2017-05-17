@@ -22,17 +22,21 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include <QtWidgets>
-#include "animationscene.h"
-#include "timeline.h"
-#include "itempropertyeditor.h"
-#include "scenepropertyeditor.h"
+#include <QFileInfo>
 
-namespace Ui
-{
-    class MainWindow;
-}
-
+class AnimationScene;
+class Timeline;
+class ItemPropertyEditor;
+class ScenePropertyEditor;
+class TransitionEditor;
+class ResizeableItem;
+class KeyFrame;
+class QSplitter;
+class QTreeWidget;
+class QGraphicsView;
+class QTreeWidgetItem;
+class QUndoStack;
+class QGraphicsItem;
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -66,8 +70,11 @@ private:
     Timeline *timeline;
     ItemPropertyEditor *m_itemPropertyEditor;
     ScenePropertyEditor *m_scenePropertyEditor;
+    TransitionEditor *m_transitionEditor;
     QDockWidget *propertiesdock;
     QDockWidget *tooldock;
+    QDockWidget *newsdock;
+    QDockWidget *elementsdock;
     QTreeWidgetItem *root;
 
 
@@ -76,6 +83,8 @@ private:
     QAction *saveAct;
     QAction *saveAsAct;
     QAction *exportAct;
+    QAction *importXmlAct;
+    QAction *exportXmlAct;
     QAction *exitAct;
     QAction *aboutAct;
     QAction *selectAct;
@@ -86,6 +95,8 @@ private:
     QAction *bitmapAct;
     QAction *showPropertyPanelAct;
     QAction *showToolPanelAct;
+    QAction *showNewsPanelAct;
+    QAction *showElementsAct;
     QAction *undoAct;
     QAction *redoAct;
     QAction *copyAct;
@@ -99,6 +110,8 @@ private:
 
 public slots:
     void exportAnimation();
+    void exportXml();
+    void importXml();
     void about();
     void save();
     void saveAs();
@@ -114,6 +127,8 @@ public slots:
     void sceneItemAdded(QGraphicsItem *);
     void showPropertyPanel();
     void showToolPanel();
+    void showNewsPanel();
+    void showElementsPanel();
     void sceneSelectionChanged();
     void timelineSelectionChanged(ResizeableItem*);
     void copy();
@@ -122,6 +137,7 @@ public slots:
     void sceneSizeChanged(int width, int height);
     void sceneItemRemoved(ResizeableItem *item);
     void idChanged(ResizeableItem *, QString);
+    void transitionSelectionChanged(KeyFrame *frame);
 };
 
 #endif // MAINWINDOW_H

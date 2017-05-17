@@ -39,6 +39,8 @@ public:
     inline ResizeableItem *item() {return m_item;}
     inline void setPlayheadPosition(int value) {m_playheadPosition = value; update();}
     inline void setScrollValue(int value) {m_horizontalScrollValue = value; update();}
+    inline KeyFrame *selectedFrame() {return m_selectedFrame;}
+    inline void deselectFrame() {m_selectedFrame = NULL; update();}
 
 private slots:
     void onCustomContextMenu(const QPoint &point);
@@ -50,6 +52,7 @@ signals:
     void deleteKeyframe(ResizeableItem *item, QString propertyName, KeyFrame *frame);
     void deleteTransition(ResizeableItem *item, QString propertyName, KeyFrame *frame);
     void addTransition(ResizeableItem *item, QString propertyName, KeyFrame *frame);
+    void transitionSelected(KeyFrame *frame);
 
 private:
     QImage m_imageRaute;
@@ -59,6 +62,7 @@ private:
     ResizeableItem *m_item;
     QString m_propertyName;
     KeyFrame *m_frame;
+    KeyFrame *m_selectedFrame;
     int m_oldx;
     int m_playheadPosition;
     QMenu *m_contextMenu;

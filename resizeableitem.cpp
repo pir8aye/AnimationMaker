@@ -46,16 +46,16 @@ ResizeableItem::ResizeableItem(AnimationScene *scene)
     connect(delAct, SIGNAL(triggered()), this, SLOT(deleteItem()));
 
     bringToFrontAct = new QAction("Bring to front");
-    connect(bringToFrontAct, SIGNAL(triggered()), this, SLOT(bringToFront()));
+    connect(bringToFrontAct, SIGNAL(triggered()), this, SLOT(bringToFrontAction()));
 
     sendToBackAct = new QAction("Send to back");
-    connect(sendToBackAct, SIGNAL(triggered()), this, SLOT(sendToBack()));
+    connect(sendToBackAct, SIGNAL(triggered()), this, SLOT(sendToBackAction()));
 
     raiseAct = new QAction("Raise");
-    connect(raiseAct, SIGNAL(triggered()), this, SLOT(raise()));
+    connect(raiseAct, SIGNAL(triggered()), this, SLOT(raiseAction()));
 
     lowerAct = new QAction("Lower");
-    connect(lowerAct, SIGNAL(triggered()), this, SLOT(lower()));
+    connect(lowerAct, SIGNAL(triggered()), this, SLOT(lowerAction()));
 
     m_contextMenu = new QMenu();
     m_contextMenu->addAction(delAct);
@@ -384,6 +384,7 @@ bool ResizeableItem::sceneEventFilter(QGraphicsItem * watched, QEvent * event)
         bool controlPressed = QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ControlModifier);
         if(controlPressed)
         {
+            // keep ratio
             qreal ratio = rect().width() / rect().height();
             if(handle->getCorner() < 4) // corners
             {
@@ -409,30 +410,66 @@ bool ResizeableItem::sceneEventFilter(QGraphicsItem * watched, QEvent * event)
         deltaWidth *= (-1);
         deltaHeight *= (-1);
 
+        bool shiftPressed = QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ShiftModifier);
+
         qreal newXpos = this->pos().x();
         qreal newYpos = this->pos().y();
 
         switch(handle->getCorner())
         {
-            case 0:
+            case 0: // top left
             {
-                newXpos = this->pos().x() + deltaWidth;
-                newYpos = this->pos().y() + deltaHeight;
+                if(shiftPressed)
+                {
+                    newXpos = this->pos().x() + deltaWidth / 2;
+                    newYpos = this->pos().y() + deltaHeight / 2;
+                }
+                else
+                {
+                    newXpos = this->pos().x() + deltaWidth;
+                    newYpos = this->pos().y() + deltaHeight;
+                }
                 break;
             }
-            case 1:
+            case 1: // top right
             {
-                newYpos = this->pos().y() + deltaHeight;
+                if(shiftPressed)
+                {
+                    newXpos = this->pos().x() + deltaWidth / 2;
+                    newYpos = this->pos().y() + deltaHeight / 2;
+                }
+                else
+                    newYpos = this->pos().y() + deltaHeight;
                 break;
             }
-            case 3:
+            case 2: // bottom right
             {
-                newXpos = this->pos().x() + deltaWidth;
+                if(shiftPressed)
+                {
+                    newXpos = this->pos().x() + deltaWidth / 2;
+                    newYpos = this->pos().y() + deltaHeight / 2;
+                }
+                break;
+            }
+            case 3: // bottom left
+            {
+                if(shiftPressed)
+                {
+                    newXpos = this->pos().x() + deltaWidth / 2;
+                    newYpos = this->pos().y() + deltaHeight / 2;
+                }
+                else
+                    newXpos = this->pos().x() + deltaWidth;
                 break;
             }
             case 4: // top
             {
-                if(controlPressed)
+                if(shiftPressed)
+                {
+                    newXpos = this->pos().x() + deltaWidth / 2;
+                    newYpos = this->pos().y() + deltaHeight / 2;
+                }
+                else if(controlPressed)
                 {
                     newYpos = this->pos().y() + deltaHeight;
                     newXpos = this->pos().x() + deltaWidth / 2;
@@ -445,7 +482,12 @@ bool ResizeableItem::sceneEventFilter(QGraphicsItem * watched, QEvent * event)
             }
             case 5: // right
             {
-                if(controlPressed)
+                if(shiftPressed)
+                {
+                    newXpos = this->pos().x() + deltaWidth / 2;
+                    newYpos = this->pos().y() + deltaHeight / 2;
+                }
+                else if(controlPressed)
                 {
                     newYpos = this->pos().y() + deltaHeight / 2;
                 }
@@ -453,7 +495,12 @@ bool ResizeableItem::sceneEventFilter(QGraphicsItem * watched, QEvent * event)
             }
             case 6: // bottom
             {
-                if(controlPressed)
+                if(shiftPressed)
+                {
+                    newXpos = this->pos().x() + deltaWidth / 2;
+                    newYpos = this->pos().y() + deltaHeight / 2;
+                }
+                else if(controlPressed)
                 {
                     newXpos = this->pos().x() + deltaWidth / 2;
                 }
@@ -461,7 +508,12 @@ bool ResizeableItem::sceneEventFilter(QGraphicsItem * watched, QEvent * event)
             }
             case 7: // left
             {
-                if(controlPressed)
+                if(shiftPressed)
+                {
+                    newXpos = this->pos().x() + deltaWidth / 2;
+                    newYpos = this->pos().y() + deltaHeight / 2;
+                }
+                else if(controlPressed)
                 {
                     newXpos = this->pos().x() + deltaWidth;
                     newYpos = this->pos().y() + deltaHeight / 2;
@@ -613,11 +665,42 @@ void ResizeableItem::adjustKeyframes(QString propertyName, QVariant value, int t
     }
 }
 
+void ResizeableItem::setOpacity(int opacity)
+{
+    m_opacity = opacity;
+    QGraphicsItem::setOpacity((qreal)m_opacity / 100);
+    emit opacityChanged(opacity);
+}
+
 void ResizeableItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 {
     scene()->clearSelection();
     setSelected(true);
     m_contextMenu->exec(event->screenPos());
+}
+
+void ResizeableItem::lowerAction()
+{
+    QUndoCommand *cmd = new LowerItemCommand(this);
+    m_scene->undoStack()->push(cmd);
+}
+
+void ResizeableItem::raiseAction()
+{
+    QUndoCommand *cmd = new RaiseItemCommand(this);
+    m_scene->undoStack()->push(cmd);
+}
+
+void ResizeableItem::sendToBackAction()
+{
+    QUndoCommand *cmd = new SendItemToBackCommand(this);
+    m_scene->undoStack()->push(cmd);
+}
+
+void ResizeableItem::bringToFrontAction()
+{
+    QUndoCommand *cmd = new BringItemToFrontCommand(this);
+    m_scene->undoStack()->push(cmd);
 }
 
 void ResizeableItem::lower()
