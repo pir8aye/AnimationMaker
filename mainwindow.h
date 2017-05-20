@@ -23,6 +23,8 @@
 
 #include <QMainWindow>
 #include <QFileInfo>
+#include <QDir>
+#include "interfaces.h"
 
 class AnimationScene;
 class Timeline;
@@ -37,6 +39,7 @@ class QGraphicsView;
 class QTreeWidgetItem;
 class QUndoStack;
 class QGraphicsItem;
+class QActionGroup;
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -60,6 +63,9 @@ private:
     void writeFile(QString fileName);
     void reset();
     void fillTree();
+    void loadPlugins();
+    void populateMenus(QObject *plugin);
+    void setKeyframes(AnimationMaker::AnimationItem *aitem, ResizeableItem *item);
 
     QSplitter *splitter;
     QToolBar *toolbar;
@@ -76,15 +82,14 @@ private:
     QDockWidget *newsdock;
     QDockWidget *elementsdock;
     QTreeWidgetItem *root;
-
+    QDir pluginsDir;
+    QStringList pluginFileNames;
 
     QAction *openAct;
     QAction *newAct;
     QAction *saveAct;
     QAction *saveAsAct;
-    QAction *exportAct;
     QAction *importXmlAct;
-    QAction *exportXmlAct;
     QAction *exitAct;
     QAction *aboutAct;
     QAction *selectAct;
@@ -102,15 +107,19 @@ private:
     QAction *copyAct;
     QAction *pasteAct;
     QAction *delAct;
+    QActionGroup *exportActionGroup;
     QMenu *fileMenu;
     QMenu *editMenu;
     QMenu *helpMenu;
     QMenu *viewMenu;
+    QMenu *importMenu;
+    QMenu *exportMenu;
     QUndoStack *undoStack;
 
 public slots:
-    void exportAnimation();
-    void exportXml();
+    void doExportMovie();
+    void doExportMeta();
+    void doImport();
     void importXml();
     void about();
     void save();
@@ -138,6 +147,7 @@ public slots:
     void sceneItemRemoved(ResizeableItem *item);
     void idChanged(ResizeableItem *, QString);
     void transitionSelectionChanged(KeyFrame *frame);
+    void pluginSetPlayheadPos(int);
 };
 
 #endif // MAINWINDOW_H
